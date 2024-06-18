@@ -24,8 +24,9 @@ merged to produce a single table with the union of those fields.
 The schema for a Parquet table SHALL be derived from a single base FHIR resource
 definition.
 
-The schema SHALL contain a field named `resourceType` of type `BINARY (STRING)`,
-and it SHALL be set to a type from the FHIR resource types value
+The schema SHALL contain a field named `resourceType` with a primitive type
+of `binary` and a logical type of `STRING`, and it SHALL be set to a type from
+the FHIR resource types value
 set ([http://hl7.org/fhir/ValueSet/resource-types](http://hl7.org/fhir/ValueSet/resource-types)).
 
 All rows within the table SHALL contain the same value for the "resourceType"
