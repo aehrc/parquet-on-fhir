@@ -296,7 +296,7 @@ Elements with a decimal type can use the `numeric` to store the value in a
 numeric form.
 
 The `numeric` annotation uses the `fixed_len_byte_array(16)` Parquet primitive
-type, and the `DECIMAL(precision=32, scale=6)` logical type.
+type, and the `DECIMAL(precision=38, scale=6)` logical type.
 
 Here is an example of a schema that can accommodate Observation resources with
 an annotated decimal value:
@@ -305,7 +305,7 @@ an annotated decimal value:
 message Observation {
   required binary resourceType (STRING);
   optional binary valueDecimal (STRING);
-  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=32, scale=6));
+  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=6));
 }
 ```
 
@@ -323,5 +323,5 @@ contain the following fields:
 
 | Field name | Parquet primitive type   | Parquet logical type           |
 |------------|--------------------------|--------------------------------|
-| value      | fixed_len_byte_array(16) | DECIMAL(precision=32, scale=6) |
+| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=6) |
 | code       | binary                   | STRING                         |
