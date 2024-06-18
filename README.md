@@ -52,7 +52,7 @@ as a field within the schema with the same name.
 
 The
 Parquet [primitive](https://github.com/apache/parquet-format/blob/master/Encodings.md)
-and [logical types]https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+and [logical types](https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
 of the value field SHALL be determined by the element type according to the
 following table:
 
