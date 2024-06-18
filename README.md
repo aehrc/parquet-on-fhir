@@ -49,31 +49,34 @@ optional.
 The value of each primitive element within a resource definition is represented
 as a field within the schema with the same name.
 
-The data type of the value field SHALL be determined by the element type
-according to the following table:
+The
+Parquet [primitive](https://github.com/apache/parquet-format/blob/master/Encodings.md)
+and [logical types]https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+of the value field SHALL be determined by the element type according to the
+following table:
 
-| FHIR type    | Parquet type  |
-|--------------|---------------|
-| base64Binary | BINARY        |
-| boolean      | BOOLEAN       |
-| canonical    | BINARY (UTF8) |
-| code         | BINARY (UTF8) |
-| date         | BINARY (UTF8) |
-| dateTime     | BINARY (UTF8) |
-| decimal      | BINARY (UTF8) |
-| id           | BINARY (UTF8) |
-| instant      | BINARY (UTF8) |
-| integer      | INT32         |
-| integer64    | INT64         |
-| markdown     | BINARY (UTF8) |
-| oid          | BINARY (UTF8) |
-| positiveInt  | INT32         |
-| string       | BINARY (UTF8) |
-| time         | BINARY (UTF8) |
-| unsignedInt  | INT32         |
-| uri          | BINARY (UTF8) |
-| url          | BINARY (UTF8) |
-| uuid         | BINARY (UTF8) |
+| FHIR type    | Parquet primitive type | Parquet logical type |
+|--------------|------------------------|----------------------|
+| base64Binary | binary                 |                      |
+| boolean      | boolean                |                      |
+| canonical    | binary                 | STRING               |
+| code         | binary                 | STRING               |
+| date         | binary                 | STRING               |
+| dateTime     | binary                 | STRING               |
+| decimal      | binary                 | STRING               |
+| id           | binary                 | STRING               |
+| instant      | binary                 | STRING               |
+| integer      | INT32                  | INT(32, true)        |
+| integer64    | INT64                  | INT(64, true)        |
+| markdown     | binary                 | STRING               |
+| oid          | binary                 | STRING               |
+| positiveInt  | INT32                  | INT(32, false)       |
+| string       | binary                 | STRING               |
+| time         | binary                 | STRING               |
+| unsignedInt  | INT32                  | INT(32, false)       |
+| uri          | binary                 | STRING               |
+| url          | binary                 | STRING               |
+| uuid         | binary                 | STRING               |
 
 Here is an example of a simple Patient resource:
 
@@ -89,9 +92,9 @@ This example could be accommodated within the following schema:
 
 ```
 message Patient {
-  required binary resourceType (UTF8);
-  optional binary id (UTF8);
-  optional binary birthDate (UTF8);
+  required binary resourceType (STRING);
+  optional binary id (STRING);
+  optional binary birthDate (STRING);
 }
 ```
 
@@ -117,10 +120,10 @@ This example could be accommodated within the following schema:
 
 ```
 message AllergyIntolerance {
-  required binary resourceType (UTF8);
+  required binary resourceType (STRING);
   optional group category (LIST) {
     repeated group list {
-      optional binary element (UTF8);
+      optional binary element (STRING);
     }
   }
 }
@@ -155,9 +158,9 @@ These examples could be accommodated within the following schema:
 
 ```
 message Patient {
-  required binary resourceType (UTF8);
+  required binary resourceType (STRING);
   optional boolean multipleBirthBoolean;
-  optional int32 multipleBirthInteger;
+  optional int32 multipleBirthInteger (INT(32, true));
 }
 ```
 
@@ -182,9 +185,9 @@ This example could be accommodated within the following schema:
 
 ```
 message Condition {
-  required binary resourceType (UTF8);
+  required binary resourceType (STRING);
   optional group subject {
-    optional binary reference (UTF8);
+    optional binary reference (STRING);
   }
 }
 ```
@@ -198,10 +201,10 @@ prepended with an underscore.
 This field is represented as a group within the schema that can contain the
 following fields:
 
-| Field name | Parquet type                                                                            |
-|------------|-----------------------------------------------------------------------------------------|
-| id         | BINARY (UTF8)                                                                           |
-| extension  | Same as Extension (see [Complex and backbone elements](#complex-and-backbone-elements)) |
+| Field name | Parquet primitive type | Parquet logical type                                                            |
+|------------|------------------------|---------------------------------------------------------------------------------|
+| id         | binary                 | STRING                                                                          |
+| extension  | group                  | See Extension ([Complex and backbone elements](#complex-and-backbone-elements)) |
 
 Here is an example of a Patient resource with a primitive element that has
 an `id` and an extension:
@@ -226,13 +229,13 @@ This example could be accommodated within the following schema:
 
 ```
 message Patient {
-  required binary resourceType (UTF8);
-  optional binary birthDate (UTF8);
+  required binary resourceType (STRING);
+  optional binary birthDate (STRING);
   optional group _birthDate {
-    optional binary id (UTF8);
+    optional binary id (STRING);
     optional group extension {
-      optional binary url (UTF8);
-      optional binary valueDateTime (UTF8);
+      optional binary url (STRING);
+      optional binary valueDateTime (STRING);
     }
   }
 }
@@ -268,8 +271,8 @@ For example, a value of `2014-06-01T12:05Z` would have a start
 of `2014-06-01T12:05:00.000Z` and an end of `2014-06-01T12:05:59.999Z` at
 millisecond precision.
 
-Both the `start` and `end` annotations use the `INT96` Parquet type, and are
-represented as number of milliseconds since the epoch.
+Both the `start` and `end` annotations use the `int96` Parquet primitive type,
+and the `TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)` logical type.
 
 Here is an example of a schema that can accommodate Patient resources with
 the `birthDate` element populated, along with annotation fields to store the
@@ -277,10 +280,10 @@ range.
 
 ```
 message Patient {
-  required binary resourceType (UTF8);
-  optional binary birthDate (UTF8);
-  optional int96 __birthDate_start;
-  optional int96 __birthDate_end;
+  required binary resourceType (STRING);
+  optional binary birthDate (STRING);
+  optional int96 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int96 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
 ```
 
 ### Decimal values
@@ -291,16 +294,17 @@ and scale of the original data.
 Elements with a decimal type can use the `numeric` to store the value in a
 numeric form.
 
-The `numeric` annotation uses the `DOUBLE` parquet type.
+The `numeric` annotation uses the `fixed_len_byte_array(16)` Parquet primitive
+type, and the `DECIMAL(precision=32, scale=6)` logical type.
 
 Here is an example of a schema that can accommodate Observation resources with
 an annotated decimal value:
 
 ```
 message Observation {
-  required binary resourceType (UTF8);
-  optional binary valueDecimal (UTF8);
-  optional double __valueDecimal_numeric;
+  required binary resourceType (STRING);
+  optional binary valueDecimal (STRING);
+  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=32, scale=6));
 }
 ```
 
@@ -316,7 +320,7 @@ canonicalized to Kelvin.
 The `canonical` annotation is represented as a group within the schema that can
 contain the following fields:
 
-| Field name | Parquet type  |
-|------------|---------------|
-| value      | DOUBLE        |
-| code       | BINARY (UTF8) |
+| Field name | Parquet primitive type   | Parquet logical type           |
+|------------|--------------------------|--------------------------------|
+| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=0) |
+| code       | binary                   | STRING                         |
