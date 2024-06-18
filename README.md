@@ -323,5 +323,5 @@ contain the following fields:
 
 | Field name | Parquet primitive type   | Parquet logical type           |
 |------------|--------------------------|--------------------------------|
-| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=0) |
+| value      | fixed_len_byte_array(16) | DECIMAL(precision=32, scale=6) |
 | code       | binary                   | STRING                         |
