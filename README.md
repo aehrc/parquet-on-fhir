@@ -325,3 +325,341 @@ contain the following fields:
 |------------|--------------------------|--------------------------------|
 | value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=6) |
 | code       | binary                   | STRING                         |
+
+## Example
+
+### Patient
+
+Here is an example of a Patient resource:
+
+```json
+{
+  "resourceType": "Patient",
+  "id": "bennelong-anne",
+  "meta": {
+    "profile": [
+      "http://hl7.org.au/fhir/core/StructureDefinition/au-core-patient"
+    ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Patient bennelong-anne</b></p><a name=\"bennelong-anne\"> </a><a name=\"hcbennelong-anne\"> </a><a name=\"hcbennelong-anne-en-AU\"> </a><p style=\"border: 1px #661aff solid; background-color: #e6e6ff; padding: 10px;\">Mrs. Anne Mary Bennelong(official) Female, DoB: 1968-10-11 ( Medicare Number:\u00a06951449677)</p><hr/><table class=\"grid\"><tr><td style=\"background-color: #f3f5da\" title=\"Ways to contact the Patient\">Contact Detail</td><td colspan=\"3\"><ul><li>ph: 0491 572 665(Mobile)</li><li>4 Brisbane Street Brisbane QLD 4112 AU (home)</li></ul></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Language spoken\">Language:</td><td colspan=\"3\"><span title=\"Codes:{urn:ietf:bcp:47 yub}\">Yugambal</span></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"This extension applies to the Patient, Person, and RelatedPerson resources and is used to indicate whether a person identifies as being of Aboriginal or Torres Strait Islander origin.\"><a href=\"https://build.fhir.org/ig/hl7au/au-fhir-base/StructureDefinition-indigenous-status.html\">Australian Indigenous Status</a></td><td colspan=\"3\">australian-indigenous-status-1 1: Aboriginal but not Torres Strait Islander origin</td></tr></table></div>"
+  },
+  "extension": [
+    {
+      "url": "http://hl7.org.au/fhir/StructureDefinition/indigenous-status",
+      "valueCoding": {
+        "system": "https://healthterminologies.gov.au/fhir/CodeSystem/australian-indigenous-status-1",
+        "code": "1",
+        "display": "Aboriginal but not Torres Strait Islander origin"
+      }
+    }
+  ],
+  "identifier": [
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MC"
+          }
+        ],
+        "text": "Medicare Number"
+      },
+      "system": "http://ns.electronichealth.net.au/id/medicare-number",
+      "value": "6951449677"
+    }
+  ],
+  "name": [
+    {
+      "use": "official",
+      "text": "Mrs. Anne Mary Bennelong",
+      "family": "Bennelong",
+      "given": [
+        "Anne"
+      ],
+      "prefix": [
+        "Mrs"
+      ]
+    }
+  ],
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "0491 572 665",
+      "use": "mobile"
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1968-10-11",
+  "address": [
+    {
+      "use": "home",
+      "line": [
+        "4 Brisbane Street"
+      ],
+      "city": "Brisbane",
+      "state": "QLD",
+      "postalCode": "4112",
+      "country": "AU"
+    }
+  ],
+  "communication": [
+    {
+      "language": {
+        "coding": [
+          {
+            "system": "urn:ietf:bcp:47",
+            "code": "yub"
+          }
+        ],
+        "text": "Yugambal"
+      }
+    }
+  ]
+}
+```
+
+This is a Parquet schema that complies with this specification and can
+accommodate the example Patient resource:
+
+```
+message Patient {
+  optional binary resourceType (STRING);
+  optional binary id (STRING);
+  optional group meta {
+    optional group profile (LIST) {
+      repeated group list {
+        optional binary element (STRING);
+      }
+    }
+  }
+  optional group text {
+    optional binary div (STRING);
+    optional binary status (STRING);
+  }
+  optional group extension (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary url (STRING);
+        optional group valueCoding {
+          optional binary code (STRING);
+          optional binary display (STRING);
+          optional binary system (STRING);
+        }
+      }
+    }
+  }
+  optional group identifier (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary system (STRING);
+        optional group type {
+          optional group coding (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary code (STRING);
+                optional binary system (STRING);
+              }
+            }
+          }
+          optional binary text (STRING);
+        }
+        optional binary value (STRING);
+      }
+    }
+  }
+  optional group name (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary family (STRING);
+        optional group given (LIST) {
+          repeated group list {
+            optional binary element (STRING);
+          }
+        }
+        optional group prefix (LIST) {
+          repeated group list {
+            optional binary element (STRING);
+          }
+        }
+        optional binary text (STRING);
+        optional binary use (STRING);
+      }
+    }
+  }
+  optional group telecom (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary system (STRING);
+        optional binary use (STRING);
+        optional binary value (STRING);
+      }
+    }
+  }
+  optional binary gender (STRING);
+  optional binary birthDate (STRING);
+  optional int96 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int96 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional group address (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary city (STRING);
+        optional binary country (STRING);
+        optional group line (LIST) {
+          repeated group list {
+            optional binary element (STRING);
+          }
+        }
+        optional binary postalCode (STRING);
+        optional binary state (STRING);
+        optional binary use (STRING);
+      }
+    }
+  }
+  optional group communication (LIST) {
+    repeated group list {
+      optional group element {
+        optional group language {
+          optional group coding (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary code (STRING);
+                optional binary system (STRING);
+              }
+            }
+          }
+          optional binary text (STRING);
+        }
+      }
+    }
+  }
+}
+```
+
+### Observation
+
+Here is an example of an Observation resource:
+
+```json
+{
+  "resourceType": "Observation",
+  "id": "bodytemp-1",
+  "meta": {
+    "profile": [
+      "http://hl7.org.au/fhir/core/StructureDefinition/au-core-bodytemp"
+    ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"res-header-id\"><b>Generated Narrative: Observation bodytemp-1</b></p><a name=\"bodytemp-1\"> </a><a name=\"hcbodytemp-1\"> </a><a name=\"hcbodytemp-1-en-AU\"> </a><p><b>status</b>: Final</p><p><b>category</b>: <span title=\"Codes:{http://terminology.hl7.org/CodeSystem/observation-category vital-signs}\">Vital Signs</span></p><p><b>code</b>: <span title=\"Codes:{http://loinc.org 8310-5}, {http://snomed.info/sct 386725007}\">Body temperature</span></p><p><b>subject</b>: <a href=\"Patient-bennelong-anne.html\">Mrs. Anne Mary Bennelong(official) Female, DoB: 1968-10-11 ( Medicare Number:\u00a06951449677)</a></p><p><b>effective</b>: 2022-02-10</p><p><b>value</b>: 36.5 C<span style=\"background: LightGoldenRodYellow\"> (Details: UCUM  codeCel = 'Cel')</span></p></div>"
+  },
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        }
+      ],
+      "text": "Vital Signs"
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "8310-5",
+        "display": "Body temperature"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "code": "386725007"
+      }
+    ],
+    "text": "Body temperature"
+  },
+  "subject": {
+    "reference": "Patient/bennelong-anne"
+  },
+  "effectiveDateTime": "2022-02-10",
+  "valueQuantity": {
+    "value": 36.5,
+    "unit": "C",
+    "system": "http://unitsofmeasure.org",
+    "code": "Cel"
+  }
+}
+```
+
+This is a Parquet schema that complies with this specification and can
+accommodate the example Observation resource:
+
+```
+message Observation {
+  optional binary resourceType (STRING);
+  optional binary id (STRING);
+  optional group meta {
+    optional group profile (LIST) {
+      repeated group list {
+        optional binary element (STRING);
+      }
+    }
+  }
+  optional group text {
+    optional binary div (STRING);
+    optional binary status (STRING);
+  }
+  optional binary status (STRING);
+  optional group category (LIST) {
+    repeated group list {
+      optional group element {
+        optional group coding (LIST) {
+          repeated group list {
+            optional group element {
+              optional binary code (STRING);
+              optional binary display (STRING);
+              optional binary system (STRING);
+            }
+          }
+        }
+        optional binary text (STRING);
+      }
+    }
+  }
+  optional group code {
+    optional group coding (LIST) {
+      repeated group list {
+        optional group element {
+          optional binary code (STRING);
+          optional binary display (STRING);
+          optional binary system (STRING);
+        }
+      }
+    }
+    optional binary text (STRING);
+  }
+  optional group subject {
+    optional binary reference (STRING);
+  }
+  optional binary effectiveDateTime (STRING);
+  optional int96 __effectiveDateTime_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int96 __effectiveDateTime_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional group valueQuantity {
+    optional binary code (STRING);
+    optional binary system (STRING);
+    optional binary unit (STRING);
+    optional binary value (STRING);
+    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
+  }
+  optional group __valueQuantity_canonical {
+    optional binary code (STRING);
+    optional binary system (STRING);
+    optional binary unit (STRING);
+    optional binary value (STRING);
+    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
+  }
+}
+```
