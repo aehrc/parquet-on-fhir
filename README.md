@@ -193,7 +193,17 @@ message Condition {
 }
 ```
 
-## Primitive extensions and internal identifiers
+## Extensions
+
+Extensions at the resource level and within complex elements SHALL be
+represented as a group within the schema with the name `extension`.
+
+The `extension` group SHALL contain fields for each of the elements within
+the [Extension](https://hl7.org/fhir/extensibility.html#Extension) data type, as
+per the rules in
+the [Complex and backbone elements](#complex-and-backbone-elements) section.
+
+### Primitive extensions and internal identifiers
 
 Extensions and the internal identifier of each primitive element can be
 represented within the schema as a field within the schema with the same name
@@ -202,10 +212,10 @@ prepended with an underscore.
 This field is represented as a group within the schema that can contain the
 following fields:
 
-| Field name | Parquet primitive type | Parquet logical type                                                            |
-|------------|------------------------|---------------------------------------------------------------------------------|
-| id         | binary                 | STRING                                                                          |
-| extension  | group                  | See Extension ([Complex and backbone elements](#complex-and-backbone-elements)) |
+| Field name | Parquet primitive type | Parquet logical type                                                                             |
+|------------|------------------------|--------------------------------------------------------------------------------------------------|
+| id         | binary                 | STRING                                                                                           |
+| extension  | group                  | As per the Extension data type ([Complex and backbone elements](#complex-and-backbone-elements)) |
 
 Here is an example of a Patient resource with a primitive element that has
 an `id` and an extension:
@@ -326,7 +336,7 @@ contain the following fields:
 | value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=6) |
 | code       | binary                   | STRING                         |
 
-## Example
+## Examples
 
 ### Patient
 
