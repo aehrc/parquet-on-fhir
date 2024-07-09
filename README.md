@@ -203,6 +203,44 @@ the [Extension](https://hl7.org/fhir/extensibility.html#Extension) data type, as
 per the rules in
 the [Complex and backbone elements](#complex-and-backbone-elements) section.
 
+Here is an example of a Patient resource with an extension at the root level:
+
+```json
+{
+  "resourceType": "Patient",
+  "extension": [
+    {
+      "url": "http://hl7.org.au/fhir/StructureDefinition/indigenous-status",
+      "valueCoding": {
+        "system": "https://healthterminologies.gov.au/fhir/CodeSystem/australian-indigenous-status-1",
+        "code": "1",
+        "display": "Aboriginal but not Torres Strait Islander origin"
+      }
+    }
+  ]
+}
+```
+
+This example could be accommodated within the following schema:
+
+```
+message Patient {
+  required binary resourceType (STRING);
+  optional group extension (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary url (STRING);
+        optional group valueCoding {
+          optional binary code (STRING);
+          optional binary display (STRING);
+          optional binary system (STRING);
+        }
+      }
+    }
+  }
+}
+```
+
 ### Primitive extensions and internal identifiers
 
 Extensions and the internal identifier of each primitive element can be
