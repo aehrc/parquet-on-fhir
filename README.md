@@ -79,6 +79,10 @@ following table:
 | url          | binary                 | STRING               |
 | uuid         | binary                 | STRING               |
 
+The format of the data stored within each field SHALL comply with the rules
+defined in the [Data Types](https://hl7.org/fhir/datatypes.html) section of the
+FHIR specification.
+
 Here is an example of a simple Patient resource:
 
 ```json
