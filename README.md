@@ -477,7 +477,7 @@ accommodate the example Patient resource:
 
 ```
 message Patient {
-  optional binary resourceType (STRING);
+  required binary resourceType (STRING);
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
@@ -651,7 +651,7 @@ accommodate the example Observation resource:
 
 ```
 message Observation {
-  optional binary resourceType (STRING);
+  required binary resourceType (STRING);
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
