@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this specification, please cite it using these metadata."
+type: software
+title: "Parquet on FHIR"
+authors:
+  - family-names: "Grimes"
+    given-names: "John"
+    orcid: "https://orcid.org/0000-0002-9575-7641"
+version: "0.1"
+doi: "10.5281/zenodo.14166591"
+date-released: "2024-11-15"
+url: "https://doi.org/10.5281/zenodo.14166591"
+repository-code: "https://github.com/aehrc/parquet-on-fhir"
+license: "CC0-1.0"
