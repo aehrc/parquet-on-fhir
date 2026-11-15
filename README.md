@@ -350,7 +350,9 @@ Elements with a decimal type can use the `numeric` to store the value in a
 numeric form.
 
 The `numeric` annotation uses the `fixed_len_byte_array(16)` Parquet primitive
-type, and the `DECIMAL(precision=38, scale=6)` logical type.
+type, and the `DECIMAL(precision=38, scale=8)` logical type. It holds the
+element's value rounded to eight fractional digits, the step size of the
+FHIRPath `Decimal` type. Values are rounded using round-half-even.
 
 Here is an example of a schema that can accommodate Observation resources with
 an annotated decimal value:
@@ -359,7 +361,7 @@ an annotated decimal value:
 message Observation {
   required binary resourceType (STRING);
   optional binary valueDecimal (STRING);
-  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=6));
+  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=8));
 }
 ```
 
@@ -706,14 +708,14 @@ message Observation {
     optional binary system (STRING);
     optional binary unit (STRING);
     optional binary value (STRING);
-    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
+    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=8));
   }
   optional group __valueQuantity_canonical {
     optional binary code (STRING);
     optional binary system (STRING);
     optional binary unit (STRING);
     optional binary value (STRING);
-    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
+    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=8));
   }
 }
 ```
