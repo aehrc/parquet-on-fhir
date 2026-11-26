@@ -511,6 +511,7 @@ a canonical annotation on the `valueQuantity` element:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group valueQuantity {
     optional binary value (STRING);
     optional binary unit (STRING);
