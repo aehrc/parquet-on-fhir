@@ -391,8 +391,8 @@ sign of `value`. For example, a canonical value of `310.15` has a `value` of
 Conversion to a canonical unit multiplies a value by a factor that depends on
 the unit, so canonical values vary widely in magnitude. For example, `1 ng` is
 `0.000000001 g`. A scaled integer holds up to 38 significant digits at any
-magnitude, whereas a decimal with a fixed scale loses the digits of a small
-value.
+magnitude below 10<sup>38</sup>, whereas a decimal with a fixed scale loses the
+digits of a small value.
 
 The following rules give each canonical value one representation, so that equal
 canonical values are stored as equal fields:
@@ -403,8 +403,7 @@ canonical values are stored as equal fields:
   and a canonical value of zero has a `value` of 0 and a `scale` of 0.
 - A canonical value that has more than 38 significant digits SHALL be rounded
   to 38 significant digits before the rules above are applied. A value that is
-  halfway between the two nearest values SHALL be rounded away from zero
-  (round-half-up).
+  halfway between the two nearest values SHALL be rounded away from zero.
 - A canonical value that is 10<sup>38</sup> or greater in magnitude after
   rounding cannot be represented. The quantity SHALL NOT have a canonical
   annotation, which means that its `value`, `scale` and `code` fields are all
