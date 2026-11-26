@@ -36,16 +36,68 @@ field.
 
 ## Field optionality
 
-The only field that must be present within the table is the `resourceType`
-field. It MUST always be in the schema of any table that complies with this
-specification, and also marked as required within the schema.
+Every table that complies with this specification SHALL contain the
+`resourceType` field, marked as required within the schema, and the
+[layout column](#layout-column).
 
-All other fields can be optionally included in the schema as needed to represent
-the data set. Consuming applications SHALL be able to tolerate the absence of
-any field within the schema except for `resourceType`.
+All other fields can be optionally included in the schema as needed to
+represent the data set. All fields other than `resourceType` SHALL be marked
+as optional.
 
-All fields in the schema other than the `resourceType` field SHALL be marked as
-optional.
+Consuming applications SHALL be able to tolerate the absence of any field
+except `resourceType` and the layout column.
+
+## Layout column
+
+The layout column identifies a table as complying with this specification and
+states its major version.
+
+It SHALL be a field at the root of the schema named `__pof_v[n]` in lower
+case, where `[n]` is the major version of this specification, written in
+decimal without leading zeros. It SHALL have the `boolean` primitive type and
+no logical type, SHALL be marked as optional, and every value SHALL be null.
+For this version:
+
+```
+optional boolean __pof_v1;
+```
+
+A table SHALL contain exactly one layout column, unless a later release of
+this specification defines otherwise.
+
+The layout column is not an annotation and is not FHIR content. A producer
+SHALL include it whether or not it includes any annotations. A conversion to a
+FHIR format SHALL NOT emit it. A table without it, including the output of a
+transformation that leaves it out, does not comply with this specification.
+
+### Versions
+
+The major version of this specification is raised only by a change that would
+cause a consumer of the previous major version to misread complying data, such
+as a change to the type, name or meaning of a field that version defines. Any
+other change is released as a minor or patch version.
+
+### Writing
+
+A producer SHALL refuse to add data to a table if either the data or the table
+lacks a layout column. It SHALL NOT add data of one major version to a table of
+another, unless a later release of this specification defines them as
+compatible.
+
+### Reading
+
+A consuming application SHALL recognise the layout column by its name and type
+alone, without reading its values. A root field with a name of that form but a
+type other than `boolean` is not a layout column.
+
+- If the table has one layout column, of a version the application supports,
+  the application SHALL read the table according to that version.
+- If the version is one the application does not support, typically a higher
+  one, the application SHALL refuse the table, and SHOULD report the version
+  found and the versions it supports.
+- If the table has more than one layout column, the application SHALL refuse
+  it, unless a later release of this specification defines otherwise.
+- If the table has no layout column, the application SHALL refuse it.
 
 ## Primitive elements
 
@@ -100,6 +152,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional binary birthDate (STRING);
 }
@@ -128,6 +181,7 @@ This example could be accommodated within the following schema:
 ```
 message AllergyIntolerance {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group category (LIST) {
     repeated group list {
       optional binary element (STRING);
@@ -166,6 +220,7 @@ These examples could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional boolean multipleBirthBoolean;
   optional int32 multipleBirthInteger (INT(32, true));
 }
@@ -193,6 +248,7 @@ This example could be accommodated within the following schema:
 ```
 message Condition {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group subject {
     optional binary reference (STRING);
   }
@@ -232,6 +288,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group extension (LIST) {
     repeated group list {
       optional group element {
@@ -285,6 +342,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary birthDate (STRING);
   optional group _birthDate {
     optional binary id (STRING);
@@ -310,6 +368,9 @@ of the data type or schema for that field.
 
 Non-standard annotations can be included in the format provided that their names
 do not collide with the annotations defined in this specification.
+
+Names of the form `__pof_v[n]` are reserved for the
+[layout column](#layout-column) and SHALL NOT be used for annotations.
 
 ### Date ranges
 
@@ -337,6 +398,7 @@ range.
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary birthDate (STRING);
   optional int64 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   optional int64 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
@@ -362,6 +424,7 @@ an annotated decimal value:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary valueDecimal (STRING);
   optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=8));
 }
@@ -448,6 +511,7 @@ a canonical annotation on the `valueQuantity` element:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group valueQuantity {
     optional binary value (STRING);
     optional binary unit (STRING);
@@ -562,6 +626,7 @@ accommodate the example Patient resource:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
@@ -736,6 +801,7 @@ accommodate the example Observation resource:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
