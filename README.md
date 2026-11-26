@@ -22,6 +22,8 @@ name begins with two underscores (`__`) is a layout field, and is not FHIR
 content. A conversion to FHIR SHALL leave out all layout fields. A consumer
 SHALL ignore any layout field that it does not recognise. A producer MAY add
 layout fields beyond those defined in this specification.
+The [layout column](#layout-column) is a layout field, and the rules in that
+section apply to it in place of the rule for unrecognised layout fields.
 
 For example, a `_birthDate` group that contains an `id` of `b1` and the layout
 fields `__start` and `__end` is converted to `"_birthDate": {"id": "b1"}` in
@@ -51,16 +53,68 @@ field.
 
 ## Field optionality
 
-The only field that must be present within the table is the `resourceType`
-field. It MUST always be in the schema of any table that complies with this
-specification, and also marked as required within the schema.
+Every table that complies with this specification SHALL contain the
+`resourceType` field, marked as required within the schema, and the
+[layout column](#layout-column).
 
-All other fields can be optionally included in the schema as needed to represent
-the data set. Consuming applications SHALL be able to tolerate the absence of
-any field within the schema except for `resourceType`.
+All other fields can be optionally included in the schema as needed to
+represent the data set. All fields other than `resourceType` SHALL be marked
+as optional.
 
-All fields in the schema other than the `resourceType` field SHALL be marked as
-optional.
+Consuming applications SHALL be able to tolerate the absence of any field
+except `resourceType` and the layout column.
+
+## Layout column
+
+The layout column identifies a table as complying with this specification and
+states its major version.
+
+It SHALL be a field at the root of the schema named `__pof_v[n]` in lower
+case, where `[n]` is the major version of this specification, written in
+decimal without leading zeros. It SHALL have the `boolean` primitive type and
+no logical type, SHALL be marked as optional, and every value SHALL be null.
+For this version:
+
+```
+optional boolean __pof_v1;
+```
+
+A table SHALL contain exactly one layout column, unless a later release of
+this specification defines otherwise.
+
+The layout column is not an annotation and is not FHIR content. A producer
+SHALL include it whether or not it includes any annotations. A conversion to a
+FHIR format SHALL NOT emit it. A table without it, including the output of a
+transformation that leaves it out, does not comply with this specification.
+
+### Versions
+
+The major version of this specification is raised only by a change that would
+cause a consumer of the previous major version to misread complying data, such
+as a change to the type, name or meaning of a field that version defines. Any
+other change is released as a minor or patch version.
+
+### Writing
+
+A producer SHALL refuse to add data to a table if either the data or the table
+lacks a layout column. It SHALL NOT add data of one major version to a table of
+another, unless a later release of this specification defines them as
+compatible.
+
+### Reading
+
+A consuming application SHALL recognise the layout column by its name and type
+alone, without reading its values. A root field with a name of that form but a
+type other than `boolean` is not a layout column.
+
+- If the table has one layout column, of a version the application supports,
+  the application SHALL read the table according to that version.
+- If the version is one the application does not support, typically a higher
+  one, the application SHALL refuse the table, and SHOULD report the version
+  found and the versions it supports.
+- If the table has more than one layout column, the application SHALL refuse
+  it, unless a later release of this specification defines otherwise.
+- If the table has no layout column, the application SHALL refuse it.
 
 ## Primitive elements
 
@@ -115,6 +169,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional binary birthDate (STRING);
 }
@@ -143,6 +198,7 @@ This example could be accommodated within the following schema:
 ```
 message AllergyIntolerance {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group category (LIST) {
     repeated group list {
       optional binary element (STRING);
@@ -181,6 +237,7 @@ These examples could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional boolean multipleBirthBoolean;
   optional int32 multipleBirthInteger (INT(32, true));
 }
@@ -208,6 +265,7 @@ This example could be accommodated within the following schema:
 ```
 message Condition {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group subject {
     optional binary reference (STRING);
   }
@@ -247,6 +305,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group extension (LIST) {
     repeated group list {
       optional group element {
@@ -300,6 +359,7 @@ This example could be accommodated within the following schema:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary birthDate (STRING);
   optional group _birthDate {
     optional binary id (STRING);
@@ -370,6 +430,10 @@ of the data type or schema for that field.
 Non-standard annotations can be included in the format provided that their names
 do not collide with the annotations defined in this specification.
 
+Names of the form `__pof_v[n]` are reserved for the
+[layout column](#layout-column) and SHALL NOT be used for annotations or other
+layout fields.
+
 ### Annotations on repeating elements
 
 Where a complex or backbone element repeats, the annotations of each item are
@@ -416,6 +480,7 @@ annotation fields to store the range of each value
 ```
 message MedicationRequest {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group dosageInstruction (LIST) {
     repeated group list {
       optional group element {
@@ -429,8 +494,8 @@ message MedicationRequest {
             repeated group list {
               optional group element {
                 optional binary id (STRING);
-                optional int96 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-                optional int96 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+                optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+                optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
               }
             }
           }
@@ -447,8 +512,8 @@ the null shown in the example.
 
 ### Date ranges
 
-Any element with the `date` or `dateTime` data type can be annotated with range
-annotations.
+Any element with the `date`, `dateTime` or `instant` data type can be annotated
+with range annotations.
 
 The `start` annotation describes the earliest instant that is considered to be
 included in the value.
@@ -456,12 +521,13 @@ included in the value.
 The `end` annotation describes the latest instant that is considered to be
 included in the value.
 
-For example, a value of `2014-06-01T12:05Z` would have a start
-of `2014-06-01T12:05:00.000Z` and an end of `2014-06-01T12:05:59.999Z` at
-millisecond precision.
+For example, a value of `2014-06-01T12:05Z` would have a start of
+`2014-06-01T12:05:00.000000Z` and an end of `2014-06-01T12:05:59.999999Z` at
+microsecond precision.
 
-Both the `start` and `end` annotations use the `int96` Parquet primitive type,
-and the `TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)` logical type.
+Both the `start` and `end` annotations use the `int64` Parquet primitive type
+and the `TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)` logical type, with
+values on the proleptic Gregorian calendar.
 
 Here is an example of a schema that can accommodate Patient resources with
 the `birthDate` element populated, along with annotation fields to store the
@@ -470,10 +536,11 @@ range.
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary birthDate (STRING);
   optional group _birthDate {
-    optional int96 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-    optional int96 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   }
 }
 ```
@@ -487,7 +554,9 @@ Elements with a decimal type can use the `numeric` to store the value in a
 numeric form.
 
 The `numeric` annotation uses the `fixed_len_byte_array(16)` Parquet primitive
-type, and the `DECIMAL(precision=38, scale=6)` logical type.
+type, and the `DECIMAL(precision=38, scale=8)` logical type. It holds the
+element's value rounded to eight fractional digits, the step size of the
+FHIRPath `Decimal` type. Values are rounded using round-half-even.
 
 Here is an example of a schema that can accommodate Observation resources with
 an annotated decimal value:
@@ -495,30 +564,94 @@ an annotated decimal value:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary valueDecimal (STRING);
   optional group _valueDecimal {
-    optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=6));
+    optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
   }
 }
 ```
 
 ### Quantity unit canonicalization
 
-Elements of type Quantity can be annotated with the `canonical_value`
+Elements of type Quantity can be annotated with the `canonical_value_exact`
 and `canonical_code` annotations to add canonical unit and value information.
 This can assist with comparison of Quantity values at query time.
 
 For example, temperature observations in Celsius or Fahrenheit could be
 canonicalized to Kelvin.
 
-The `canonical_value` annotation holds the value expressed in the canonical
-unit, and the `canonical_code` annotation holds the code of the canonical unit.
-They have the following types:
+The `canonical_value_exact` annotation holds the value expressed in the
+canonical unit, and the `canonical_code` annotation holds the code of the
+canonical unit.
 
-| Annotation name | Parquet primitive type   | Parquet logical type           |
-|-----------------|--------------------------|--------------------------------|
-| canonical_value | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=6) |
-| canonical_code  | binary                   | STRING                         |
+The `canonical_code` annotation uses the `binary` Parquet primitive type, and
+the `STRING` logical type.
+
+The `canonical_value_exact` annotation is represented as a group within the
+schema that contains the following fields:
+
+| Field name | Parquet primitive type   | Parquet logical type           |
+|------------|--------------------------|--------------------------------|
+| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=0) |
+| scale      | INT32                    | INT(32, true)                  |
+
+The `value` and `scale` fields hold the canonical value as a scaled integer. The
+canonical value is equal to `value` × 10<sup>-`scale`</sup>, and its sign is the
+sign of `value`. For example, a canonical value of `310.15` has a `value` of
+31015 and a `scale` of 2.
+
+Conversion to a canonical unit multiplies a value by a factor that depends on
+the unit, so canonical values vary widely in magnitude. For example, `1 ng` is
+`0.000000001 g`. A scaled integer holds up to 38 significant digits at any
+magnitude below 10<sup>38</sup>, whereas a decimal with a fixed scale loses the
+digits of a small value.
+
+The following rules give each canonical value one representation, so that equal
+canonical values are stored as equal fields:
+
+- The `scale` field SHALL NOT be negative.
+- The `scale` field SHALL be the smallest scale that can represent the canonical
+  value. The `value` field therefore has no trailing zeros unless `scale` is 0,
+  and a canonical value of zero has a `value` of 0 and a `scale` of 0.
+- A canonical value that has more than 38 significant digits SHALL be rounded
+  to 38 significant digits before the rules above are applied. A value that is
+  halfway between the two nearest values SHALL be rounded away from zero.
+- A canonical value that is 10<sup>38</sup> or greater in magnitude after
+  rounding cannot be represented. The quantity SHALL NOT have canonical
+  annotations, which means that its `canonical_value_exact` and
+  `canonical_code` annotations are both null.
+- A schema that contains one of the `value` and `scale` fields SHALL contain the
+  other. Within a row, the two fields SHALL be either both null or both not
+  null.
+
+Here are some examples of quantities and their canonical annotations, using the
+base units of UCUM as the canonical units. The `value` and `scale` columns are
+the fields of the `canonical_value_exact` annotation:
+
+| Quantity      | Canonical value                    | value                                  | scale | canonical_code |
+|---------------|------------------------------------|----------------------------------------|-------|----------------|
+| `1 ng`        | `0.000000001 g`                    | 1                                      | 9     | g              |
+| `1000 pg`     | `0.000000001 g`                    | 1                                      | 9     | g              |
+| `4 ng`        | `0.000000004 g`                    | 4                                      | 9     | g              |
+| `250 pg`      | `0.00000000025 g`                  | 25                                     | 11    | g              |
+| `0 mg`        | `0 g`                              | 0                                      | 0     | g              |
+| `120 mm[Hg]`  | `15998640 g.m-1.s-2`               | 15998640                               | 0     | g.m-1.s-2      |
+| `37 Cel`      | `310.15 K`                         | 31015                                  | 2     | K              |
+| `98.6 [degF]` | `310.15 K`                         | 31015                                  | 2     | K              |
+| `310.15 K`    | `310.15 K`                         | 31015                                  | 2     | K              |
+| `1 [degF]`    | `255.927… K`, with the 7 recurring | 25592777777777777777777777777777777778 | 35    | K              |
+
+Two quantities that have canonical annotations are equal if their
+`canonical_code` annotations are equal, and the `value` and `scale` fields of
+their `canonical_value_exact` annotations are equal. Canonical values that have
+different codes cannot be compared.
+
+To order two canonical values that have the same code, their scales need to be
+aligned first. In the table above, `250 pg` has a greater `value` than `4 ng`
+(25 against 4), but it is the smaller quantity: at a scale of 11, the two values
+are 25 and 400. For this reason, the minimum and maximum statistics that Parquet
+keeps for the `value` field do not describe the range of the canonical values.
 
 Here is an example of a schema that can accommodate Observation resources with
 a quantity value, along with annotation fields to store its canonical form and
@@ -527,15 +660,19 @@ the numeric form of its value (see [Decimal values](#decimal-values)):
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional group valueQuantity {
     optional binary code (STRING);
     optional binary system (STRING);
     optional binary unit (STRING);
     optional binary value (STRING);
     optional group _value {
-      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=6));
+      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
     }
-    optional fixed_len_byte_array(16) __canonical_value (DECIMAL(precision=38, scale=6));
+    optional group __canonical_value_exact {
+      optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+      optional int32 scale (INT(32, true));
+    }
     optional binary __canonical_code (STRING);
   }
 }
@@ -641,6 +778,7 @@ accommodate the example Patient resource:
 ```
 message Patient {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
@@ -715,8 +853,8 @@ message Patient {
   optional binary gender (STRING);
   optional binary birthDate (STRING);
   optional group _birthDate {
-    optional int96 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-    optional int96 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   }
   optional group address (LIST) {
     repeated group list {
@@ -817,6 +955,7 @@ accommodate the example Observation resource:
 ```
 message Observation {
   required binary resourceType (STRING);
+  optional boolean __pof_v1;
   optional binary id (STRING);
   optional group meta {
     optional group profile (LIST) {
@@ -863,8 +1002,8 @@ message Observation {
   }
   optional binary effectiveDateTime (STRING);
   optional group _effectiveDateTime {
-    optional int96 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-    optional int96 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   }
   optional group valueQuantity {
     optional binary code (STRING);
@@ -872,9 +1011,12 @@ message Observation {
     optional binary unit (STRING);
     optional binary value (STRING);
     optional group _value {
-      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=6));
+      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
     }
-    optional fixed_len_byte_array(16) __canonical_value (DECIMAL(precision=38, scale=6));
+    optional group __canonical_value_exact {
+      optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+      optional int32 scale (INT(32, true));
+    }
     optional binary __canonical_code (STRING);
   }
 }
