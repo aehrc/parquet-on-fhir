@@ -12,6 +12,23 @@ This format is intended to be a lossless representation of FHIR. For example,
 FHIR JSON converted to this format should be able to be regenerated from the
 format without any loss of data.
 
+The layout is a mapping
+of [FHIR's JSON representation](https://hl7.org/fhir/R4/json.html) to Parquet.
+Where this specification does not say otherwise, a field has the name, the
+cardinality and the meaning that FHIR JSON gives it.
+
+There is one exception to this mapping. A field at any level of the schema whose
+name begins with two underscores (`__`) is a layout field, and is not FHIR
+content. A conversion to FHIR SHALL leave out all layout fields. A consumer
+SHALL ignore any layout field that it does not recognise. A producer MAY add
+layout fields beyond those defined in this specification.
+The [layout column](#layout-column) is a layout field, and the rules in that
+section apply to it in place of the rule for unrecognised layout fields.
+
+For example, a `_birthDate` group that contains an `id` of `b1` and the layout
+fields `__start` and `__end` is converted to `"_birthDate": {"id": "b1"}` in
+FHIR JSON.
+
 The format is intended to define the structure and types of the schema without
 requiring all fields to be present. A data set that populates only a few
 elements for a resource can be represented by a schema with only those fields in
@@ -354,14 +371,58 @@ message Patient {
 }
 ```
 
+Where the primitive element repeats, this field follows FHIR JSON's
+[representation of primitive elements](https://hl7.org/fhir/R4/json.html#primitive).
+It is a list with the same length as the list of values, and the two lists are
+aligned by position. An item is null where the value at the same position has
+no `id`, no extensions and no [annotations](#annotations).
+
+For example, here is a repeating element where only the second value has
+an `id`:
+
+```json
+{
+  "given": [
+    "Anne",
+    "Mary"
+  ],
+  "_given": [
+    null,
+    {
+      "id": "g2"
+    }
+  ]
+}
+```
+
 ## Annotations
 
 Annotations are a mechanism for including derived forms of element values that
 may be useful for querying the data.
 
-An annotated field is the name of the annotated element, prefixed by two
-underscores (`__`) and suffixed by an underscore and the name of the
-annotation (`_[annotation name]`).
+Each annotation is a layout field. It is stored within the container of the
+element that it annotates, and its name is the name of the annotation prefixed
+by two underscores (`__[annotation name]`).
+
+The container depends on the type of the annotated element:
+
+- A primitive element is annotated within the group that has the same name
+  prepended with an underscore, as described
+  in [Primitive extensions and internal identifiers](#primitive-extensions-and-internal-identifiers).
+  For example, the `start` annotation of `birthDate` is `_birthDate.__start`.
+  This group can contain annotations alone, with no `id` and no `extension`. In
+  that case it has no FHIR content, and a conversion to FHIR leaves it out.
+- A complex or backbone element is annotated within the group that represents
+  it. For example, the `canonical_code` annotation of `valueQuantity`
+  is `valueQuantity.__canonical_code`.
+
+A primitive element within a complex element follows the first of these rules.
+For example, the `numeric` annotation of the value of a quantity
+is `valueQuantity._value.__numeric`.
+
+Each annotation is a field of its own. The annotations of an element are not
+grouped into a single structure. An annotation can have a group as its type
+where its value has more than one part.
 
 Each annotation defined in this specification provides a name and a description
 of the data type or schema for that field.
@@ -370,7 +431,84 @@ Non-standard annotations can be included in the format provided that their names
 do not collide with the annotations defined in this specification.
 
 Names of the form `__pof_v[n]` are reserved for the
-[layout column](#layout-column) and SHALL NOT be used for annotations.
+[layout column](#layout-column) and SHALL NOT be used for annotations or other
+layout fields.
+
+### Annotations on repeating elements
+
+Where a complex or backbone element repeats, the annotations of each item are
+fields of the group that represents that item.
+
+Where a primitive element repeats, the field prepended with an underscore is a
+list that is aligned by position with the list of values, as described
+in [Primitive extensions and internal identifiers](#primitive-extensions-and-internal-identifiers).
+The annotations of a value are fields of the item at the same position.
+
+An item that contains annotations alone has no FHIR content. A conversion to
+FHIR converts it to a null, which keeps the two lists aligned, and leaves out
+the field where every item is null.
+
+Here is an example of a MedicationRequest resource with a repeating element,
+where only the first value has an `id`:
+
+```json
+{
+  "resourceType": "MedicationRequest",
+  "dosageInstruction": [
+    {
+      "timing": {
+        "event": [
+          "2024-03-01",
+          "2024-03-02"
+        ],
+        "_event": [
+          {
+            "id": "e1"
+          },
+          null
+        ]
+      }
+    }
+  ]
+}
+```
+
+This example could be accommodated within the following schema, along with
+annotation fields to store the range of each value
+(see [Date ranges](#date-ranges)):
+
+```
+message MedicationRequest {
+  required binary resourceType (STRING);
+  optional boolean __pof_v1;
+  optional group dosageInstruction (LIST) {
+    repeated group list {
+      optional group element {
+        optional group timing {
+          optional group event (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group _event (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary id (STRING);
+                optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+                optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+When the range annotations are populated, neither item of `_event` is null. The
+second item contains annotations alone, and a conversion to FHIR converts it to
+the null shown in the example.
 
 ### Date ranges
 
@@ -400,8 +538,10 @@ message Patient {
   required binary resourceType (STRING);
   optional boolean __pof_v1;
   optional binary birthDate (STRING);
-  optional int64 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
-  optional int64 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional group _birthDate {
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  }
 }
 ```
 
@@ -426,29 +566,35 @@ message Observation {
   required binary resourceType (STRING);
   optional boolean __pof_v1;
   optional binary valueDecimal (STRING);
-  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=8));
+  optional group _valueDecimal {
+    optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
+  }
 }
 ```
 
 ### Quantity unit canonicalization
 
-Elements of type Quantity can be annotated with the `canonical` annotation to
-add canonical unit and value information. This can assist with comparison of
-Quantity values at query time.
+Elements of type Quantity can be annotated with the `canonical_value_exact`
+and `canonical_code` annotations to add canonical unit and value information.
+This can assist with comparison of Quantity values at query time.
 
 For example, temperature observations in Celsius or Fahrenheit could be
 canonicalized to Kelvin.
 
-The `canonical` annotation is represented as a group within the schema that can
-contain the following fields:
+The `canonical_value_exact` annotation holds the value expressed in the
+canonical unit, and the `canonical_code` annotation holds the code of the
+canonical unit.
+
+The `canonical_code` annotation uses the `binary` Parquet primitive type, and
+the `STRING` logical type.
+
+The `canonical_value_exact` annotation is represented as a group within the
+schema that contains the following fields:
 
 | Field name | Parquet primitive type   | Parquet logical type           |
 |------------|--------------------------|--------------------------------|
 | value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=0) |
 | scale      | INT32                    | INT(32, true)                  |
-| code       | binary                   | STRING                         |
-
-The `code` field holds the code of the canonical unit.
 
 The `value` and `scale` fields hold the canonical value as a scaled integer. The
 canonical value is equal to `value` × 10<sup>-`scale`</sup>, and its sign is the
@@ -472,56 +618,62 @@ canonical values are stored as equal fields:
   to 38 significant digits before the rules above are applied. A value that is
   halfway between the two nearest values SHALL be rounded away from zero.
 - A canonical value that is 10<sup>38</sup> or greater in magnitude after
-  rounding cannot be represented. The quantity SHALL NOT have a canonical
-  annotation, which means that its `value`, `scale` and `code` fields are all
-  null.
+  rounding cannot be represented. The quantity SHALL NOT have canonical
+  annotations, which means that its `canonical_value_exact` and
+  `canonical_code` annotations are both null.
 - A schema that contains one of the `value` and `scale` fields SHALL contain the
   other. Within a row, the two fields SHALL be either both null or both not
   null.
 
-Here are some examples of quantities and the fields of their canonical
-annotations, using the base units of UCUM as the canonical units:
+Here are some examples of quantities and their canonical annotations, using the
+base units of UCUM as the canonical units. The `value` and `scale` columns are
+the fields of the `canonical_value_exact` annotation:
 
-| Quantity      | Canonical value                    | value                                  | scale | code      |
-|---------------|------------------------------------|----------------------------------------|-------|-----------|
-| `1 ng`        | `0.000000001 g`                    | 1                                      | 9     | g         |
-| `1000 pg`     | `0.000000001 g`                    | 1                                      | 9     | g         |
-| `4 ng`        | `0.000000004 g`                    | 4                                      | 9     | g         |
-| `250 pg`      | `0.00000000025 g`                  | 25                                     | 11    | g         |
-| `0 mg`        | `0 g`                              | 0                                      | 0     | g         |
-| `120 mm[Hg]`  | `15998640 g.m-1.s-2`               | 15998640                               | 0     | g.m-1.s-2 |
-| `37 Cel`      | `310.15 K`                         | 31015                                  | 2     | K         |
-| `98.6 [degF]` | `310.15 K`                         | 31015                                  | 2     | K         |
-| `310.15 K`    | `310.15 K`                         | 31015                                  | 2     | K         |
-| `1 [degF]`    | `255.927… K`, with the 7 recurring | 25592777777777777777777777777777777778 | 35    | K         |
+| Quantity      | Canonical value                    | value                                  | scale | canonical_code |
+|---------------|------------------------------------|----------------------------------------|-------|----------------|
+| `1 ng`        | `0.000000001 g`                    | 1                                      | 9     | g              |
+| `1000 pg`     | `0.000000001 g`                    | 1                                      | 9     | g              |
+| `4 ng`        | `0.000000004 g`                    | 4                                      | 9     | g              |
+| `250 pg`      | `0.00000000025 g`                  | 25                                     | 11    | g              |
+| `0 mg`        | `0 g`                              | 0                                      | 0     | g              |
+| `120 mm[Hg]`  | `15998640 g.m-1.s-2`               | 15998640                               | 0     | g.m-1.s-2      |
+| `37 Cel`      | `310.15 K`                         | 31015                                  | 2     | K              |
+| `98.6 [degF]` | `310.15 K`                         | 31015                                  | 2     | K              |
+| `310.15 K`    | `310.15 K`                         | 31015                                  | 2     | K              |
+| `1 [degF]`    | `255.927… K`, with the 7 recurring | 25592777777777777777777777777777777778 | 35    | K              |
 
-Two quantities that have a canonical annotation are equal if their `code`,
-`value` and `scale` fields are all equal. Canonical values that have different
-codes cannot be compared.
+Two quantities that have canonical annotations are equal if their
+`canonical_code` annotations are equal, and the `value` and `scale` fields of
+their `canonical_value_exact` annotations are equal. Canonical values that have
+different codes cannot be compared.
 
-To order two canonical values that have the same `code`, their scales need to be
+To order two canonical values that have the same code, their scales need to be
 aligned first. In the table above, `250 pg` has a greater `value` than `4 ng`
 (25 against 4), but it is the smaller quantity: at a scale of 11, the two values
 are 25 and 400. For this reason, the minimum and maximum statistics that Parquet
 keeps for the `value` field do not describe the range of the canonical values.
 
 Here is an example of a schema that can accommodate Observation resources with
-a canonical annotation on the `valueQuantity` element:
+a quantity value, along with annotation fields to store its canonical form and
+the numeric form of its value (see [Decimal values](#decimal-values)):
 
 ```
 message Observation {
   required binary resourceType (STRING);
   optional boolean __pof_v1;
   optional group valueQuantity {
-    optional binary value (STRING);
-    optional binary unit (STRING);
+    optional binary code (STRING);
     optional binary system (STRING);
-    optional binary code (STRING);
-  }
-  optional group __valueQuantity_canonical {
-    optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
-    optional int32 scale (INT(32, true));
-    optional binary code (STRING);
+    optional binary unit (STRING);
+    optional binary value (STRING);
+    optional group _value {
+      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
+    }
+    optional group __canonical_value_exact {
+      optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+      optional int32 scale (INT(32, true));
+    }
+    optional binary __canonical_code (STRING);
   }
 }
 ```
@@ -700,8 +852,10 @@ message Patient {
   }
   optional binary gender (STRING);
   optional binary birthDate (STRING);
-  optional int64 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
-  optional int64 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional group _birthDate {
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  }
   optional group address (LIST) {
     repeated group list {
       optional group element {
@@ -847,19 +1001,23 @@ message Observation {
     optional binary reference (STRING);
   }
   optional binary effectiveDateTime (STRING);
-  optional int64 __effectiveDateTime_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
-  optional int64 __effectiveDateTime_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional group _effectiveDateTime {
+    optional int64 __start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+    optional int64 __end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  }
   optional group valueQuantity {
     optional binary code (STRING);
     optional binary system (STRING);
     optional binary unit (STRING);
     optional binary value (STRING);
-    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=8));
-  }
-  optional group __valueQuantity_canonical {
-    optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
-    optional int32 scale (INT(32, true));
-    optional binary code (STRING);
+    optional group _value {
+      optional fixed_len_byte_array(16) __numeric (DECIMAL(precision=38, scale=8));
+    }
+    optional group __canonical_value_exact {
+      optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+      optional int32 scale (INT(32, true));
+    }
+    optional binary __canonical_code (STRING);
   }
 }
 ```
