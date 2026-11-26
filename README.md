@@ -374,8 +374,8 @@ Names of the form `__pof_v[n]` are reserved for the
 
 ### Date ranges
 
-Any element with the `date` or `dateTime` data type can be annotated with range
-annotations.
+Any element with the `date`, `dateTime` or `instant` data type can be annotated
+with range annotations.
 
 The `start` annotation describes the earliest instant that is considered to be
 included in the value.
@@ -383,12 +383,13 @@ included in the value.
 The `end` annotation describes the latest instant that is considered to be
 included in the value.
 
-For example, a value of `2014-06-01T12:05Z` would have a start
-of `2014-06-01T12:05:00.000Z` and an end of `2014-06-01T12:05:59.999Z` at
-millisecond precision.
+For example, a value of `2014-06-01T12:05Z` would have a start of
+`2014-06-01T12:05:00.000000Z` and an end of `2014-06-01T12:05:59.999999Z` at
+microsecond precision.
 
-Both the `start` and `end` annotations use the `int96` Parquet primitive type,
-and the `TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)` logical type.
+Both the `start` and `end` annotations use the `int64` Parquet primitive type
+and the `TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)` logical type, with
+values on the proleptic Gregorian calendar.
 
 Here is an example of a schema that can accommodate Patient resources with
 the `birthDate` element populated, along with annotation fields to store the
@@ -399,8 +400,9 @@ message Patient {
   required binary resourceType (STRING);
   optional boolean __pof_v1;
   optional binary birthDate (STRING);
-  optional int96 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-  optional int96 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int64 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional int64 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+}
 ```
 
 ### Decimal values
@@ -412,7 +414,9 @@ Elements with a decimal type can use the `numeric` to store the value in a
 numeric form.
 
 The `numeric` annotation uses the `fixed_len_byte_array(16)` Parquet primitive
-type, and the `DECIMAL(precision=38, scale=6)` logical type.
+type, and the `DECIMAL(precision=38, scale=8)` logical type. It holds the
+element's value rounded to eight fractional digits, the step size of the
+FHIRPath `Decimal` type. Values are rounded using round-half-even.
 
 Here is an example of a schema that can accommodate Observation resources with
 an annotated decimal value:
@@ -422,7 +426,7 @@ message Observation {
   required binary resourceType (STRING);
   optional boolean __pof_v1;
   optional binary valueDecimal (STRING);
-  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=6));
+  optional fixed_len_byte_array(16) __valueDecimal_numeric (DECIMAL(precision=38, scale=8));
 }
 ```
 
@@ -440,8 +444,86 @@ contain the following fields:
 
 | Field name | Parquet primitive type   | Parquet logical type           |
 |------------|--------------------------|--------------------------------|
-| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=6) |
+| value      | fixed_len_byte_array(16) | DECIMAL(precision=38, scale=0) |
+| scale      | INT32                    | INT(32, true)                  |
 | code       | binary                   | STRING                         |
+
+The `code` field holds the code of the canonical unit.
+
+The `value` and `scale` fields hold the canonical value as a scaled integer. The
+canonical value is equal to `value` × 10<sup>-`scale`</sup>, and its sign is the
+sign of `value`. For example, a canonical value of `310.15` has a `value` of
+31015 and a `scale` of 2.
+
+Conversion to a canonical unit multiplies a value by a factor that depends on
+the unit, so canonical values vary widely in magnitude. For example, `1 ng` is
+`0.000000001 g`. A scaled integer holds up to 38 significant digits at any
+magnitude below 10<sup>38</sup>, whereas a decimal with a fixed scale loses the
+digits of a small value.
+
+The following rules give each canonical value one representation, so that equal
+canonical values are stored as equal fields:
+
+- The `scale` field SHALL NOT be negative.
+- The `scale` field SHALL be the smallest scale that can represent the canonical
+  value. The `value` field therefore has no trailing zeros unless `scale` is 0,
+  and a canonical value of zero has a `value` of 0 and a `scale` of 0.
+- A canonical value that has more than 38 significant digits SHALL be rounded
+  to 38 significant digits before the rules above are applied. A value that is
+  halfway between the two nearest values SHALL be rounded away from zero.
+- A canonical value that is 10<sup>38</sup> or greater in magnitude after
+  rounding cannot be represented. The quantity SHALL NOT have a canonical
+  annotation, which means that its `value`, `scale` and `code` fields are all
+  null.
+- A schema that contains one of the `value` and `scale` fields SHALL contain the
+  other. Within a row, the two fields SHALL be either both null or both not
+  null.
+
+Here are some examples of quantities and the fields of their canonical
+annotations, using the base units of UCUM as the canonical units:
+
+| Quantity      | Canonical value                    | value                                  | scale | code      |
+|---------------|------------------------------------|----------------------------------------|-------|-----------|
+| `1 ng`        | `0.000000001 g`                    | 1                                      | 9     | g         |
+| `1000 pg`     | `0.000000001 g`                    | 1                                      | 9     | g         |
+| `4 ng`        | `0.000000004 g`                    | 4                                      | 9     | g         |
+| `250 pg`      | `0.00000000025 g`                  | 25                                     | 11    | g         |
+| `0 mg`        | `0 g`                              | 0                                      | 0     | g         |
+| `120 mm[Hg]`  | `15998640 g.m-1.s-2`               | 15998640                               | 0     | g.m-1.s-2 |
+| `37 Cel`      | `310.15 K`                         | 31015                                  | 2     | K         |
+| `98.6 [degF]` | `310.15 K`                         | 31015                                  | 2     | K         |
+| `310.15 K`    | `310.15 K`                         | 31015                                  | 2     | K         |
+| `1 [degF]`    | `255.927… K`, with the 7 recurring | 25592777777777777777777777777777777778 | 35    | K         |
+
+Two quantities that have a canonical annotation are equal if their `code`,
+`value` and `scale` fields are all equal. Canonical values that have different
+codes cannot be compared.
+
+To order two canonical values that have the same `code`, their scales need to be
+aligned first. In the table above, `250 pg` has a greater `value` than `4 ng`
+(25 against 4), but it is the smaller quantity: at a scale of 11, the two values
+are 25 and 400. For this reason, the minimum and maximum statistics that Parquet
+keeps for the `value` field do not describe the range of the canonical values.
+
+Here is an example of a schema that can accommodate Observation resources with
+a canonical annotation on the `valueQuantity` element:
+
+```
+message Observation {
+  required binary resourceType (STRING);
+  optional group valueQuantity {
+    optional binary value (STRING);
+    optional binary unit (STRING);
+    optional binary system (STRING);
+    optional binary code (STRING);
+  }
+  optional group __valueQuantity_canonical {
+    optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+    optional int32 scale (INT(32, true));
+    optional binary code (STRING);
+  }
+}
+```
 
 ## Examples
 
@@ -617,8 +699,8 @@ message Patient {
   }
   optional binary gender (STRING);
   optional binary birthDate (STRING);
-  optional int96 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-  optional int96 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int64 __birthDate_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional int64 __birthDate_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   optional group address (LIST) {
     repeated group list {
       optional group element {
@@ -764,21 +846,19 @@ message Observation {
     optional binary reference (STRING);
   }
   optional binary effectiveDateTime (STRING);
-  optional int96 __effectiveDateTime_start (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
-  optional int96 __effectiveDateTime_end (TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS));
+  optional int64 __effectiveDateTime_start (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
+  optional int64 __effectiveDateTime_end (TIMESTAMP(isAdjustedToUTC=true, unit=MICROS));
   optional group valueQuantity {
     optional binary code (STRING);
     optional binary system (STRING);
     optional binary unit (STRING);
     optional binary value (STRING);
-    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
+    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=8));
   }
   optional group __valueQuantity_canonical {
+    optional fixed_len_byte_array(16) value (DECIMAL(precision=38, scale=0));
+    optional int32 scale (INT(32, true));
     optional binary code (STRING);
-    optional binary system (STRING);
-    optional binary unit (STRING);
-    optional binary value (STRING);
-    optional fixed_len_byte_array(16) __value_numeric (DECIMAL(precision=38, scale=6));
   }
 }
 ```
