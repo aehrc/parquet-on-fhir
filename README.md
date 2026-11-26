@@ -380,9 +380,37 @@ list that is aligned by position with the list of values, as described
 in [Primitive extensions and internal identifiers](#primitive-extensions-and-internal-identifiers).
 The annotations of a value are fields of the item at the same position.
 
-Here is an example of a schema that can accommodate MedicationRequest resources
-with the `dosageInstruction.timing.event` element populated, along with the `id`
-of each value and annotation fields to store its range
+An item that contains annotations alone has no FHIR content. A conversion to
+FHIR converts it to a null, which keeps the two lists aligned, and leaves out
+the field where every item is null.
+
+Here is an example of a MedicationRequest resource with a repeating element,
+where only the first value has an `id`:
+
+```json
+{
+  "resourceType": "MedicationRequest",
+  "dosageInstruction": [
+    {
+      "timing": {
+        "event": [
+          "2024-03-01",
+          "2024-03-02"
+        ],
+        "_event": [
+          {
+            "id": "e1"
+          },
+          null
+        ]
+      }
+    }
+  ]
+}
+```
+
+This example could be accommodated within the following schema, along with
+annotation fields to store the range of each value
 (see [Date ranges](#date-ranges)):
 
 ```
@@ -412,6 +440,10 @@ message MedicationRequest {
   }
 }
 ```
+
+When the range annotations are populated, neither item of `_event` is null. The
+second item contains annotations alone, and a conversion to FHIR converts it to
+the null shown in the example.
 
 ### Date ranges
 
